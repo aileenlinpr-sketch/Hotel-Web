@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>飯店・島嶼資訊地圖</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+:root{--ink:#173b43;--cream:#fff9ec;--mint:#b9ded0;--coral:#ee9879;--gold:#e9c66e}
+*{box-sizing:border-box}body{margin:0;font-family:'Noto Sans TC',sans-serif;background:#d9eee7;color:var(--ink);overflow:hidden}
+#scene{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hud{position:fixed;z-index:3;pointer-events:none}.clock{top:18px;left:20px;background:#fff9ecf2;padding:11px 16px;border-radius:14px;box-shadow:0 8px 30px #31584b22;font-weight:700;letter-spacing:.04em;z-index:6;min-width:220px}.clock small{display:block;font-size:10px;opacity:.65;letter-spacing:.16em}
+.brand{top:20px;left:50%;transform:translateX(-50%);text-align:center;text-shadow:0 2px 8px #ffffffaa}.brand b{font-size:clamp(20px,3vw,34px);letter-spacing:.13em}.brand span{display:block;font-size:11px;letter-spacing:.22em}
+.legend{left:20px;top:88px;bottom:auto;background:#fff9ecf2;padding:11px 15px;border-radius:15px;font-size:12px;line-height:1.8;box-shadow:0 8px 30px #31584b22;min-width:142px;z-index:4}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;background:#5c9c7a}.dot.p{background:#e4ad4e}.dot.n{background:#e88b73}.dot.u{background:#9ba9a7}
+.controls{position:fixed;right:20px;bottom:20px;z-index:5;display:flex;gap:8px}.controls button,.nav button{border:0;border-radius:999px;padding:11px 17px;background:#fff9ec;color:var(--ink);font:700 12px inherit;box-shadow:0 5px 20px #31584b22;cursor:pointer}.controls button.active{background:var(--ink);color:white}
+.hint{position:fixed;right:22px;top:22px;z-index:3;background:#fff9ecbb;padding:9px 13px;border-radius:12px;font-size:11px}
+.panel{position:fixed;z-index:8;right:20px;top:50%;transform:translateY(-50%) translateX(120%);width:min(390px,calc(100vw - 32px));max-height:82vh;overflow:auto;background:var(--cream);border-radius:23px;padding:24px;box-shadow:0 20px 70px #173b4350;transition:.35s ease}
+.panel.open{transform:translateY(-50%) translateX(0)}.panel .eyebrow{font-size:10px;letter-spacing:.2em;color:#8b9d91;font-weight:700}.panel h2{margin:7px 0 10px;font-size:25px}.panel p{line-height:1.8;font-size:14px}.panel .close{position:absolute;right:15px;top:15px;border:0;background:#e9f0e9;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer}.status{display:inline-block;padding:5px 11px;border-radius:99px;background:#e2eee4;font-size:11px;font-weight:700;margin:4px 0 12px}.nav{display:flex;gap:8px;margin-top:20px}.nav button{background:#e6eee6;box-shadow:none}.nav button:last-child{margin-left:auto;background:var(--ink);color:white}
+.cardnote{background:#edf4e9;padding:13px;border-radius:13px;margin-top:14px;font-size:12px;line-height:1.8}
+.quiz-option{display:block;width:100%;text-align:left;margin:8px 0;padding:12px 14px;border:1px solid #d7e2d8;border-radius:12px;background:white;color:var(--ink);cursor:pointer;font:inherit;font-size:13px}.quiz-option:hover{border-color:#719c83;background:#f3f8ef}
+#feedback{font-weight:700;font-size:13px;min-height:22px}
+@media(max-width:650px){.brand{top:75px}.hint{top:135px;right:12px}.clock{left:12px;top:12px;min-width:0}.legend{left:12px;top:auto;bottom:84px;font-size:10px;padding:9px 12px;min-width:0}.controls{right:12px;bottom:12px}.controls button{padding:10px 12px}.panel{right:10px;top:auto;bottom:12px;transform:translateY(120%);max-height:72vh}.panel.open{transform:translateY(0)}}
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div class="hud clock"><small>HOTEL ISLAND · LOCAL TIME</small><span id="clock">2026/11/13　14:36:00</span></div>
+<div class="hud brand"><b>THE HOTEL ISLANDS</b><span>一座飯店・八座生活資訊島</span></div>
+<div class="hint">點擊島嶼建築，探索飯店資訊 ↗</div>
+<div class="legend">
+<div><i class="dot"></i>已完成</div><div><i class="dot p"></i>進行中</div><div><i class="dot n"></i>規劃中</div><div><i class="dot u"></i>未提出（無符號）</div>
+</div>
+<div class="controls"><button data-time="morning">早</button><button class="active" data-time="noon">中</button><button data-time="night">晚</button></div>
+<aside class="panel" id="panel">
+<button class="close" id="close" aria-label="關閉">×</button><div id="panel-content"></div>
+<div class="nav"><button id="prev">← 上一頁</button><button id="next">下一頁 →</button><button id="close2">關閉</button></div>
+</aside>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const canvas=document.querySelector('#scene'), scene=new THREE.Scene();scene.background=new THREE.Color('#d9eee7');scene.fog=new THREE.Fog('#d9eee7',18,38);
+const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,.1,100);camera.position.set(12,15,19);
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const controls=new THREE.OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.05;controls.minDistance=12;controls.maxDistance=30;controls.target.set(0,0,0);
+scene.add(new THREE.HemisphereLight(0xffffff,0x72958b,2));
+const sun=new THREE.DirectionalLight(0xfff1d1,3);sun.position.set(-8,15,10);sun.castShadow=true;scene.add(sun);
+const mat=(c,r=.8)=>new THREE.MeshStandardMaterial({color:c,roughness:r});
+const green=mat('#8dbca3'),sand=mat('#f4dcae'),deep=mat('#679b8c'),white=mat('#fff8e8'),coral=mat('#e99578'),roof=mat('#d96f59'),blue=mat('#9bcbd0');
+const ground=new THREE.Mesh(new THREE.CircleGeometry(14,96),mat('#b7ddd0'));ground.rotation.x=-Math.PI/2;ground.position.y=-.35;ground.receiveShadow=true;scene.add(ground);
+const water=new THREE.Mesh(new THREE.CircleGeometry(18,96),mat('#a6d4cc'));water.rotation.x=-Math.PI/2;water.position.y=-.48;scene.add(water);
+const islands=[
+{id:'metro',name:'淡水線捷運',sub:'NEARBY TRANSIT',x:-7,z:-4,color:'#e9c66e',status:'已完成',desc:'前往飯店的交通資訊入口。可在此補上最近捷運站名稱、出口、步行時間與大眾運輸路線。',detail:'建議資訊：捷運路線圖、車站出口、步行導航、機場與火車站轉乘方式。'},
+{id:'chifeng',name:'赤峰街',sub:'LOCAL DISCOVERY',x:-7,z:2,color:'#e99578',status:'規劃中',desc:'巷弄選物、特色店家與在地散步路線。',detail:'建議資訊：推薦店家、營業時間、步行地圖與雨天備案。'},
+{id:'park',name:'心中山公園',sub:'GREEN WALK',x:7,z:-4,color:'#80b69b',status:'進行中',desc:'城市綠帶與休憩散步空間。',detail:'建議資訊：公園入口、活動資訊、無障礙動線與周邊景點。'},
+{id:'hotel',name:'飯店大樓',sub:'THE HOTEL · MAIN ISLAND',x:0,z:0,color:'#e7b76c',status:'已完成',desc:'歡迎來到飯店資訊中心。點選各樓層或服務項目，查看入住期間所需資訊。',detail:'可放置：入住／退房時間、櫃檯服務、客房設備、Wi-Fi、館內設施與緊急聯絡方式。',main:true},
+{id:'office',name:'辦公大樓',sub:'OFFICE',x:-7,z:-1,color:'#9ebdc1',status:'未提出',desc:'辦公地點與內部工作資訊。',detail:'可放置：部門位置、辦公時間、會議空間、聯絡窗口與訪客動線。'},
+{id:'restaurant',name:'餐廳',sub:'DINING',x:0,z:6,color:'#df9c7c',status:'進行中',desc:'餐飲服務與用餐資訊。',detail:'可放置：早餐時段、餐廳位置、菜單、過敏原標示、素食選項與訂位方式。'},
+{id:'housekeeping',name:'房務',sub:'HOUSEKEEPING',x:5,z:7,color:'#b5a5c9',status:'規劃中',desc:'客房清潔、備品與房務需求。',detail:'可放置：清潔服務時段、毛巾更換、客房用品補充與服務需求聯絡方式。'},
+{id:'eco',name:'永續環保',sub:'SUSTAINABILITY',x:7,z:2,color:'#8dbb85',status:'已完成',desc:'一起實踐友善環境的住宿方式，從自備盥洗用品開始。',detail:'飯店自 2025 年 7 月 22 日起停止提供一次性備品，敬請貴賓自行攜帶個人盥洗用品。'}
+];
+const pickables=[];const islandGroups=[];
+function box(parent,w,h,d,x,y,z,material){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
+function addBuilding(g,type){
+ if(type==='hotel'){box(g,2.2,3.2,1.8,0,1.7,0,white);box(g,2.35,.18,1.95,0,3.35,0,coral);for(let y=.65;y<3;y+=.62)for(let x=-.72;x<=.72;x+=.72)box(g,.22,.28,.035,x,y,.93,blue);box(g,.65,.6,.08,0,.35,.94,roof)}
+ else if(type==='office'){box(g,1.7,3.8,1.5,0,2,0,mat('#e6eee8'));for(let y=.55;y<3.7;y+=.55)box(g,1.73,.08,1.53,0,y,0,blue)}
+ else if(type==='restaurant'){box(g,2.2,1.35,1.7,0,.8,0,white);const r=box(g,2.45,.2,1.95,0,1.55,0,roof);r.rotation.z=.08;box(g,.5,.7,.08,0,.38,.88,coral)}
+ else if(type==='housekeeping'){box(g,1.8,1.5,1.5,0,.9,0,white);box(g,2,.18,1.7,0,1.72,0,mat('#b5a5c9'));box(g,.45,.5,.08,0,.35,.78,blue)}
+ else if(type==='park'){for(let i=0;i<5;i++){const t=new THREE.Mesh(new THREE.ConeGeometry(.55,1.5,7),green);t.position.set((i%3-1)*.8,.8,Math.floor(i/3)*.8-.3);t.castShadow=true;g.add(t)}}
+ else if(type==='metro'){box(g,1.7,.35,1,0,.3,0,white);box(g,.14,1,.14,-.5,.8,0,coral);box(g,.14,1,.14,.5,.8,0,coral)}
+ else if(type==='chifeng'){for(let i=0;i<3;i++){box(g,.65,1.1,.7,(i-1)*.75,.55,0,white);box(g,.7,.12,.75,(i-1)*.75,1.15,0,coral)}}
+ else {const leaf=new THREE.Mesh(new THREE.DodecahedronGeometry(.8),green);leaf.position.y=.7;g.add(leaf);box(g,.8,.25,.8,0,.15,0,white)}
+}
+islands.forEach((d,i)=>{
+ const g=new THREE.Group();g.position.set(d.x,0,d.z);scene.add(g);islandGroups.push(g);
+ const base=new THREE.Mesh(new THREE.CylinderGeometry(d.main?2.5:1.85,d.main?2.8:2.1,.48,9),sand);base.position.y=-.05;base.castShadow=true;base.receiveShadow=true;g.add(base);
+ const top=new THREE.Mesh(new THREE.CylinderGeometry(d.main?2.35:1.72,d.main?2.35:1.72,.18,9),mat(d.color));top.position.y=.25;g.add(top);
+ addBuilding(g,d.id);
+ const label=document.createElement('canvas');label.width=512;label.height=128;const ctx=label.getContext('2d');ctx.fillStyle='#173b43';ctx.font='bold 42px sans-serif';ctx.textAlign='center';ctx.fillText(d.name,256,55);ctx.font='22px sans-serif';ctx.fillStyle='#496c68';ctx.fillText(d.sub,256,92);
+ const tex=new THREE.CanvasTexture(label);const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true}));sprite.scale.set(3.2,.8,1);sprite.position.y=4.2;g.add(sprite);
+ // small status marker (未提出 deliberately has no marker)
+ if(d.status!=='未提出'){const marker=new THREE.Mesh(new THREE.SphereGeometry(.12,12,12),mat(d.status==='已完成'?'#5c9c7a':d.status==='進行中'?'#e4ad4e':'#e88b73'));marker.position.set(1.35,.75,.9);g.add(marker)}
+ const hit=new THREE.Mesh(new THREE.CylinderGeometry(2.1,2.1,4.8,12),new THREE.MeshBasicMaterial({transparent:true,opacity:0}));hit.position.y=2;g.add(hit);hit.userData.index=i;pickables.push(hit);
+});
+const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let current=0;
+function show(i){current=(i+islands.length)%islands.length;const d=islands[current];document.querySelector('#panel-content').innerHTML=`<div class="eyebrow">${d.sub}</div><h2>${d.name}</h2><span class="status">${d.status}</span><p>${d.desc}</p><div class="cardnote">${d.detail}</div>`+(d.id==='eco'?quizHTML():'');document.querySelector('#panel').classList.add('open');if(d.id==='eco')wireQuiz()}
+const quizHTML=()=>`<div class="cardnote"><b>永續環保小問答</b><p>自 2025 年 7 月 22 日起，入住飯店時，建議旅客如何響應備品減量政策？</p><button class="quiz-option" data-answer="wrong">A. 向櫃檯索取一次性盥洗用品</button><button class="quiz-option" data-answer="right">B. 自行攜帶個人盥洗用品</button><button class="quiz-option" data-answer="wrong">C. 每天更換全新備品</button><div id="feedback"></div></div>`;
+function wireQuiz(){document.querySelectorAll('.quiz-option').forEach(b=>b.onclick=()=>{const f=document.querySelector('#feedback');f.textContent=b.dataset.answer==='right'?'答對了！自備盥洗用品，一起減少一次性廢棄物。':'再想一想：飯店已停止提供一次性備品，請選擇更環保的做法。';f.style.color=b.dataset.answer==='right'?'#43805d':'#bd725c'})}
+function clickScene(e){const r=canvas.getBoundingClientRect();mouse.x=(e.clientX-r.left)/r.width*2-1;mouse.y=-((e.clientY-r.top)/r.height)*2+1;ray.setFromCamera(mouse,camera);const hits=ray.intersectObjects(pickables);if(hits.length)show(hits[0].object.userData.index)}
+canvas.addEventListener('pointerdown',clickScene);
+document.querySelector('#prev').onclick=()=>show(current-1);document.querySelector('#next').onclick=()=>show(current+1);document.querySelector('#close').onclick=document.querySelector('#close2').onclick=()=>document.querySelector('#panel').classList.remove('open');
+document.querySelectorAll('[data-time]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-time]').forEach(x=>x.classList.toggle('active',x===b));const t=b.dataset.time;if(t==='morning'){scene.background.set('#f4dfbd');scene.fog.color.set('#f4dfbd');sun.color.set('#ffe0a3');sun.intensity=2.6}else if(t==='noon'){scene.background.set('#d9eee7');scene.fog.color.set('#d9eee7');sun.color.set('#fff1d1');sun.intensity=3}else{scene.background.set('#243b53');scene.fog.color.set('#243b53');sun.color.set('#9bb8e0');sun.intensity=.65}});
+function tick(){requestAnimationFrame(tick);controls.update();renderer.render(scene,camera)}tick();
+function updateClock(){const d=new Date();const f=n=>String(n).padStart(2,'0');document.querySelector('#clock').textContent=`${d.getFullYear()}/${f(d.getMonth()+1)}/${f(d.getDate())}　${f(d.getHours())}:${f(d.getMinutes())}:${f(d.getSeconds())}`}updateClock();setInterval(updateClock,1000);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body></html>
